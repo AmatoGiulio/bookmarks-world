@@ -47,7 +47,10 @@ function createCardTexture(title: string, fill: string, index: number) {
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   const dark = index === 1 || index === 3
-  ctx.fillStyle = dark ? 'rgba(255,255,255,.42)' : 'rgba(12,12,11,.42)'
+
+  ctx.fillStyle = dark
+    ? 'rgba(255,255,255,.42)'
+    : 'rgba(12,12,11,.42)'
   ctx.font = '600 20px ui-monospace, monospace'
   ctx.fillText(`0${index + 1} / SPATIAL`, 34, 44)
 
@@ -55,7 +58,9 @@ function createCardTexture(title: string, fill: string, index: number) {
   ctx.font = '600 42px system-ui'
   ctx.fillText(title, 34, 196)
 
-  ctx.fillStyle = dark ? 'rgba(255,255,255,.35)' : 'rgba(12,12,11,.34)'
+  ctx.fillStyle = dark
+    ? 'rgba(255,255,255,.35)'
+    : 'rgba(12,12,11,.34)'
   ctx.font = '22px system-ui'
   ctx.fillText('reference', 34, 238)
 
@@ -65,6 +70,7 @@ function createCardTexture(title: string, fill: string, index: number) {
   texture.magFilter = THREE.LinearFilter
   texture.generateMipmaps = true
   texture.anisotropy = 4
+
   return texture
 }
 
@@ -89,10 +95,13 @@ export function ClusterPlane({
   const baseRef = React.useRef<THREE.Mesh>(null)
   const baseMaterialRef = React.useRef<THREE.MeshBasicMaterial>(null)
   const itemRefs = React.useRef<Array<THREE.Mesh | null>>([])
-  const itemMaterialRefs = React.useRef<Array<THREE.MeshBasicMaterial | null>>([])
+  const itemMaterialRefs =
+    React.useRef<Array<THREE.MeshBasicMaterial | null>>([])
+
   const { gl } = useThree()
   const [expanded, setExpanded] = React.useState(false)
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null)
+
   const animation = React.useRef({
     progress: 0,
     opacity: 0,
@@ -106,8 +115,9 @@ export function ClusterPlane({
   }, [object.height, object.priority, object.width])
 
   const itemTextures = React.useMemo(
-    () => ITEMS.map(([title, fill], index) =>
-      createCardTexture(title, fill, index)),
+    () =>
+      ITEMS.map(([title, fill], index) =>
+        createCardTexture(title, fill, index)),
     [],
   )
 
@@ -120,10 +130,16 @@ export function ClusterPlane({
     }
   }, [itemTextures, object])
 
+  React.useEffect(() => {
+    baseRef.current?.layers.enable(1)
+    itemRefs.current.forEach((mesh) => mesh?.layers.enable(1))
+  }, [texture])
+
   useFrame((_, delta) => {
     const group = groupRef.current
     const base = baseRef.current
     const material = baseMaterialRef.current
+
     if (!group || !base || !material || !texture) return
 
     const cam = cameraGridRef.current
@@ -164,6 +180,7 @@ export function ClusterPlane({
 
     const targetProgress = expanded && !focusId ? 1 : 0
     const response = 1 - Math.exp(-delta * 6.2)
+
     animation.current.progress +=
       (targetProgress - animation.current.progress) * response
 
@@ -205,8 +222,8 @@ export function ClusterPlane({
         lerp(-0.3 * index, targetZ, local),
       )
 
-      const scale = 0.72 + local * 0.28
-      mesh.scale.set(12.6 * scale, 7.5 * scale, 1)
+      const itemScale = 0.72 + local * 0.28
+      mesh.scale.set(12.6 * itemScale, 7.5 * itemScale, 1)
 
       itemMaterial.opacity =
         animation.current.opacity * local * 0.98
@@ -240,6 +257,7 @@ export function ClusterPlane({
         ref={baseRef}
         geometry={PLANE_GEOMETRY}
         scale={baseScale}
+        userData={{ bookmarkId: object.id }}
       >
         <meshBasicMaterial
           ref={baseMaterialRef}

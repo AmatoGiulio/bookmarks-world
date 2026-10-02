@@ -340,3 +340,82 @@
     margin-top: 18px;
   }
 }
+
+
+.semantic-lens {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  width: 240px;
+  height: 240px;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform;
+  transition: opacity 120ms ease;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 22px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.16),
+    0 24px 64px rgba(0, 0, 0, 0.28);
+}
+
+.semantic-lens[data-visible='true'] {
+  opacity: 1;
+}
+
+.semantic-lens::before,
+.semantic-lens::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.semantic-lens::before {
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.055),
+      rgba(255, 255, 255, 0) 44%
+    );
+}
+
+.semantic-lens::after {
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  height: 45px;
+  border-radius: 10px;
+  background: rgba(7, 7, 6, 0.74);
+  backdrop-filter: blur(8px);
+}
+
+.semantic-lens__label {
+  position: absolute;
+  z-index: 2;
+  left: 24px;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #f5f3ec;
+}
+
+.semantic-lens__label strong {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-lens__label span {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from 'react'
 import { FocusLayer } from '../focus/FocusLayer'
 import { InfiniteBookmarksCanvas } from './r3f/InfiniteBookmarksCanvas'
+import { SemanticLensOverlay } from './SemanticLensOverlay'
 import { spaceObjects } from './spaceData'
 import type { SpaceObject } from './spaceTypes'
 
@@ -60,8 +61,13 @@ export function CanvasSpace() {
       </header>
 
       <div className="space-help">
-        drag to move · scroll / pinch through depth · click a pile to unfold
+        drag · scroll / pinch depth · click pile · hold Shift for semantic lens
       </div>
+
+      <SemanticLensOverlay
+        objects={spaceObjects}
+        disabled={focus !== null}
+      />
 
       {focus ? (
         <FocusLayer

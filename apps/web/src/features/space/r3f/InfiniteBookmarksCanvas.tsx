@@ -22,6 +22,7 @@ import {
   type CameraGridState,
 } from './BookmarkPlane'
 import { ClusterPlane } from './ClusterPlane'
+import { LensPass } from './LensPass'
 import type { SpaceObject } from '../spaceTypes'
 
 const KEYBOARD_MAP = [
@@ -133,7 +134,10 @@ function SceneController({
     const onMouseDown = (event: MouseEvent) => {
       if (focusId) return
       state.isDragging = true
-      state.lastMouse = { x: event.clientX, y: event.clientY }
+      state.lastMouse = {
+        x: event.clientX,
+        y: event.clientY,
+      }
       canvas.style.cursor = 'grabbing'
     }
 
@@ -150,9 +154,15 @@ function SceneController({
 
       if (focusId || !state.isDragging) return
 
-      state.targetVel.x -= (event.clientX - state.lastMouse.x) * 0.025
-      state.targetVel.y += (event.clientY - state.lastMouse.y) * 0.025
-      state.lastMouse = { x: event.clientX, y: event.clientY }
+      state.targetVel.x -=
+        (event.clientX - state.lastMouse.x) * 0.025
+      state.targetVel.y +=
+        (event.clientY - state.lastMouse.y) * 0.025
+
+      state.lastMouse = {
+        x: event.clientX,
+        y: event.clientY,
+      }
     }
 
     const onWheel = (event: WheelEvent) => {
@@ -175,17 +185,26 @@ function SceneController({
 
       const touches = Array.from(event.touches)
 
-      if (touches.length === 1 && state.lastTouches.length >= 1) {
+      if (
+        touches.length === 1 &&
+        state.lastTouches.length >= 1
+      ) {
         const touch = touches[0]
         const last = state.lastTouches[0]
 
         if (touch && last) {
-          state.targetVel.x -= (touch.clientX - last.clientX) * 0.02
-          state.targetVel.y += (touch.clientY - last.clientY) * 0.02
+          state.targetVel.x -=
+            (touch.clientX - last.clientX) * 0.02
+          state.targetVel.y +=
+            (touch.clientY - last.clientY) * 0.02
         }
-      } else if (touches.length === 2 && state.lastTouchDist > 0) {
+      } else if (
+        touches.length === 2 &&
+        state.lastTouchDist > 0
+      ) {
         const distance = touchDistance(touches)
-        state.scrollAccum += (state.lastTouchDist - distance) * 0.006
+        state.scrollAccum +=
+          (state.lastTouchDist - distance) * 0.006
         state.lastTouchDist = distance
       }
 
@@ -201,10 +220,18 @@ function SceneController({
     canvas.addEventListener('mousedown', onMouseDown)
     window.addEventListener('mouseup', onMouseUp)
     window.addEventListener('mousemove', onMouseMove)
-    canvas.addEventListener('wheel', onWheel, { passive: false })
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false })
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false })
-    canvas.addEventListener('touchend', onTouchEnd, { passive: false })
+    canvas.addEventListener('wheel', onWheel, {
+      passive: false,
+    })
+    canvas.addEventListener('touchstart', onTouchStart, {
+      passive: false,
+    })
+    canvas.addEventListener('touchmove', onTouchMove, {
+      passive: false,
+    })
+    canvas.addEventListener('touchend', onTouchEnd, {
+      passive: false,
+    })
 
     return () => {
       canvas.removeEventListener('mousedown', onMouseDown)
@@ -323,7 +350,9 @@ function SceneController({
 
     if (chunkKey !== state.lastChunkKey) {
       state.lastChunkKey = chunkKey
-      setActiveChunks(activeChunksAround(chunks, cx, cy, cz))
+      setActiveChunks(
+        activeChunksAround(chunks, cx, cy, cz),
+      )
     }
   })
 
@@ -341,7 +370,9 @@ function SceneController({
     const cz = Math.floor(state.basePos.z / CHUNK_SIZE)
 
     state.lastChunkKey = `${cx},${cy},${cz}`
-    setActiveChunks(activeChunksAround(chunks, cx, cy, cz))
+    setActiveChunks(
+      activeChunksAround(chunks, cx, cy, cz),
+    )
   }, [camera, chunks])
 
   return (
@@ -375,6 +406,11 @@ function SceneController({
           )}
         </React.Fragment>
       ))}
+
+      <LensPass
+        objects={objects}
+        disabled={focusId !== null}
+      />
     </>
   )
 }
