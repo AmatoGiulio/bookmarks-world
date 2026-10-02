@@ -16,6 +16,7 @@ export const spaceObjects: SpaceObject[] = [
     image: 'https://upload.wikimedia.org/wikipedia/commons/d/dd/Muybridge_race_horse_animated.gif',
     accent: '#d8d1c2',
     meta: 'A sequence becomes an interface once time is made spatial.',
+    url: 'https://commons.wikimedia.org/wiki/File:Muybridge_race_horse_animated.gif',
     priority: 3,
   },
   {
@@ -65,6 +66,8 @@ export const spaceObjects: SpaceObject[] = [
     image: 'https://i.ytimg.com/vi/jiJR1ET715M/hqdefault.jpg',
     accent: '#d42f25',
     meta: 'One signal becomes image and sound.',
+    url: 'https://www.youtube.com/watch?v=jiJR1ET715M',
+    embedUrl: 'https://www.youtube-nocookie.com/embed/jiJR1ET715M?rel=0&modestbranding=1',
     priority: 3,
   },
   {
@@ -128,6 +131,8 @@ export const spaceObjects: SpaceObject[] = [
     tags: ['github', 'native', 'motion', 'blur'],
     accent: '#111111',
     meta: 'AGSL · Metal · progressive blur',
+    url: 'https://github.com/AmatoGiulio/react-native-edge-fade',
+    repoFullName: 'AmatoGiulio/react-native-edge-fade',
     priority: 3,
   },
   {
@@ -160,6 +165,7 @@ export const spaceObjects: SpaceObject[] = [
     tags: ['canvas', 'spatial', 'web', 'interaction'],
     accent: '#201f1d',
     meta: 'Chunked rendering, inertial camera and a world that continues past the viewport.',
+    url: 'https://tympanus.net/codrops/2026/01/07/infinite-canvas-building-a-seamless-pan-anywhere-image-space/',
     priority: 3,
   },
   {
@@ -176,6 +182,7 @@ export const spaceObjects: SpaceObject[] = [
     tags: ['focus', 'continuity', 'zoom', 'interaction'],
     accent: '#e7e3d8',
     meta: 'The selected thing grows into the next state instead of navigating away.',
+    url: 'https://tympanus.net/codrops/2021/12/01/grid-zoom-layout/',
     priority: 3,
   },
   {
@@ -209,6 +216,7 @@ export const spaceObjects: SpaceObject[] = [
     tags: ['motion', 'apple', 'history', 'interaction'],
     accent: '#181818',
     meta: 'Historical motion recast as a contemporary interface behavior.',
+    url: 'https://www.krispuckett.com/shadowfax',
     priority: 3,
   },
   {
@@ -225,6 +233,7 @@ export const spaceObjects: SpaceObject[] = [
     tags: ['motion', 'path', 'stack', 'interaction'],
     accent: '#d8d3c5',
     meta: 'A compact stack unfolds through curved trajectories and tiny stagger.',
+    url: 'https://tympanus.net/codrops/2026/06/04/creating-a-thumbnail-flow-animation-with-gsap-motionpath/',
     priority: 2,
   },
 ]
