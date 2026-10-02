@@ -5,7 +5,7 @@ import {
 } from '@bookmarks/spatial-engine'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { FocusLayer } from '../focus/FocusLayer'
-import { hitTestSpaceObject, renderSpaceScene } from './canvasScene'
+import { createCanvasScene } from './canvasScene'
 import { spaceObjects } from './spaceData'
 import type { SpaceObject } from './spaceTypes'
 
@@ -17,6 +17,7 @@ type FocusState = {
 export function CanvasSpace() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<SpatialEngine | null>(null)
+  const sceneRef = useRef<ReturnType<typeof createCanvasScene> | null>(null)
   const queryRef = useRef('')
   const hudRef = useRef<HTMLDivElement | null>(null)
 
@@ -29,28 +30,44 @@ export function CanvasSpace() {
   }, [query])
 
   useEffect(() => {
+    sceneRef.current?.setFocusedId(focus?.object.id ?? null)
+    engineRef.current?.requestRender()
+  }, [focus])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+
+    const scene = createCanvasScene(
+      spaceObjects,
+      () => engineRef.current?.requestRender(),
+    )
+    sceneRef.current = scene
 
     const engine = createSpatialEngine(canvas, {
       minZoom: 0.28,
       maxZoom: 2.6,
+      maxDpr: 1.5,
       initialCamera: { x: 80, y: 120, zoom: 0.68 },
-      render: (frame) => {
-        renderSpaceScene({
-          frame,
-          objects: spaceObjects,
-          query: queryRef.current,
-        })
-      },
+
+      render: (frame) => scene.render(frame, queryRef.current),
+
+      onPointerMove: (pointer) =>
+        scene.setPointer(pointer, queryRef.current),
+
       onTap: (tap) => {
-        const hit = hitTestSpaceObject(
+        const hit = scene.hitTest(
           tap.worldX,
           tap.worldY,
-          spaceObjects,
           queryRef.current,
         )
         if (!hit) return
+
+        if (hit.object.kind === 'cluster') {
+          scene.toggleCluster(performance.now())
+          engine.requestRender()
+          return
+        }
 
         const topLeft = engine.worldToClient(
           hit.x - hit.width / 2,
@@ -71,6 +88,7 @@ export function CanvasSpace() {
           ),
         })
       },
+
       onPerformanceSample: (sample: PerformanceSnapshot) => {
         if (!hudRef.current) return
         hudRef.current.textContent = sample.idle
@@ -82,6 +100,11 @@ export function CanvasSpace() {
     engineRef.current = engine
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        scene.setLensActive(true)
+        engine.requestRender()
+      }
+
       if (event.key.toLowerCase() === 'p' && hudRef.current) {
         hudRef.current.dataset.visible =
           hudRef.current.dataset.visible === 'true' ? 'false' : 'true'
@@ -102,12 +125,21 @@ export function CanvasSpace() {
       }
     }
 
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== 'Shift') return
+      scene.setLensActive(false)
+      engine.requestRender()
+    }
+
     window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
     engine.requestRender()
 
     return () => {
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
       engineRef.current = null
+      sceneRef.current = null
       engine.destroy()
     }
   }, [])
@@ -145,7 +177,7 @@ export function CanvasSpace() {
       </header>
 
       <div className="space-help">
-        canvas world · drag to pan · wheel · pinch · / search · H home · P perf
+        drag · wheel · pinch · click stack · Shift semantic lens · / search · P perf
       </div>
 
       <div ref={hudRef} className="performance-hud" data-visible="false">

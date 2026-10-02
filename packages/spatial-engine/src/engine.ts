@@ -5,6 +5,7 @@ import type {
   PerformanceSnapshot,
   SpatialEngine,
   SpatialEngineOptions,
+  SpatialPointer,
   ViewportState,
 } from './types'
 
@@ -24,7 +25,7 @@ export function createSpatialEngine(
   const friction = options.friction ?? 9.5
   const wheelPanScale = options.wheelPanScale ?? 1
   const zoomSensitivity = options.zoomSensitivity ?? 0.0024
-  const maxDpr = options.maxDpr ?? 2
+  const maxDpr = options.maxDpr ?? 1.5
 
   const camera: CameraState = {
     x: options.initialCamera?.x ?? 0,
@@ -51,6 +52,49 @@ export function createSpatialEngine(
   let sampleFrameTotal = 0
   let destroyed = false
 
+  const clientToWorld = (clientX: number, clientY: number) => {
+    const rect = canvas.getBoundingClientRect()
+    const sx = clientX - rect.left - viewport.width * 0.5
+    const sy = clientY - rect.top - viewport.height * 0.5
+
+    return {
+      x: camera.x + sx / camera.zoom,
+      y: camera.y + sy / camera.zoom,
+    }
+  }
+
+  const pointerFromEvent = (event: PointerEvent): SpatialPointer => {
+    const rect = canvas.getBoundingClientRect()
+    const world = clientToWorld(event.clientX, event.clientY)
+
+    return {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      screenX: event.clientX - rect.left,
+      screenY: event.clientY - rect.top,
+      worldX: world.x,
+      worldY: world.y,
+    }
+  }
+
+  const worldToClient = (x: number, y: number) => {
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: rect.left + viewport.width * 0.5 + (x - camera.x) * camera.zoom,
+      y: rect.top + viewport.height * 0.5 + (y - camera.y) * camera.zoom,
+    }
+  }
+
+  const requestRender = () => {
+    if (metrics.idle) {
+      sampleStartedAt = performance.now()
+      sampleFrames = 0
+      sampleFrameTotal = 0
+    }
+    metrics.idle = false
+    scheduler.request()
+  }
+
   const syncCanvasSize = () => {
     const rect = canvas.getBoundingClientRect()
     viewport.width = Math.max(1, rect.width)
@@ -62,24 +106,6 @@ export function createSpatialEngine(
     if (canvas.width !== width) canvas.width = width
     if (canvas.height !== height) canvas.height = height
     requestRender()
-  }
-
-  const clientToWorld = (clientX: number, clientY: number) => {
-    const rect = canvas.getBoundingClientRect()
-    const sx = clientX - rect.left - viewport.width * 0.5
-    const sy = clientY - rect.top - viewport.height * 0.5
-    return {
-      x: camera.x + sx / camera.zoom,
-      y: camera.y + sy / camera.zoom,
-    }
-  }
-
-  const worldToClient = (x: number, y: number) => {
-    const rect = canvas.getBoundingClientRect()
-    return {
-      x: rect.left + viewport.width * 0.5 + (x - camera.x) * camera.zoom,
-      y: rect.top + viewport.height * 0.5 + (y - camera.y) * camera.zoom,
-    }
   }
 
   const samplePerformance = (frameMs: number, now: number) => {
@@ -100,7 +126,7 @@ export function createSpatialEngine(
   const draw = (now: number) => {
     ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0)
     ctx.clearRect(0, 0, viewport.width, viewport.height)
-    options.render({ ctx, camera, viewport, now })
+    return options.render({ ctx, camera, viewport, now }) === true
   }
 
   const scheduler = createFrameScheduler((now) => {
@@ -120,27 +146,23 @@ export function createSpatialEngine(
       if (Math.abs(camera.velocityY) < STOP_EPSILON) camera.velocityY = 0
     }
 
-    draw(now)
+    const sceneAnimating = draw(now)
     samplePerformance(dtMs, now)
 
-    const moving = pointerId !== null || camera.velocityX !== 0 || camera.velocityY !== 0
+    const moving =
+      pointerId !== null ||
+      camera.velocityX !== 0 ||
+      camera.velocityY !== 0 ||
+      sceneAnimating
+
     if (!moving) {
       metrics.idle = true
       options.onPerformanceSample?.(metrics)
       lastFrameTime = 0
     }
+
     return moving
   })
-
-  const requestRender = () => {
-    if (metrics.idle) {
-      sampleStartedAt = performance.now()
-      sampleFrames = 0
-      sampleFrameTotal = 0
-    }
-    metrics.idle = false
-    scheduler.request()
-  }
 
   const resizeObserver = new ResizeObserver(syncCanvasSize)
   resizeObserver.observe(canvas)
@@ -165,7 +187,12 @@ export function createSpatialEngine(
   }
 
   const onPointerMove = (event: PointerEvent) => {
-    if (pointerId !== event.pointerId) return
+    if (pointerId !== event.pointerId) {
+      if (options.onPointerMove?.(pointerFromEvent(event)) === true) {
+        requestRender()
+      }
+      return
+    }
 
     const dx = event.clientX - pointerStartX
     const dy = event.clientY - pointerStartY
@@ -178,6 +205,8 @@ export function createSpatialEngine(
     lastPointerX = event.clientX
     lastPointerY = event.clientY
     lastPointerTime = event.timeStamp
+
+    options.onPointerMove?.(pointerFromEvent(event))
     requestRender()
   }
 
@@ -197,13 +226,7 @@ export function createSpatialEngine(
     canvas.dataset.dragging = 'false'
 
     if (travel <= TAP_THRESHOLD) {
-      const world = clientToWorld(event.clientX, event.clientY)
-      options.onTap?.({
-        clientX: event.clientX,
-        clientY: event.clientY,
-        worldX: world.x,
-        worldY: world.y,
-      })
+      options.onTap?.(pointerFromEvent(event))
     }
 
     requestRender()

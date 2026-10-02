@@ -25,9 +25,11 @@ export type CanvasFrame = {
   now: number
 }
 
-export type SpatialTap = {
+export type SpatialPointer = {
   clientX: number
   clientY: number
+  screenX: number
+  screenY: number
   worldX: number
   worldY: number
 }
@@ -40,8 +42,9 @@ export type SpatialEngineOptions = {
   zoomSensitivity?: number
   maxDpr?: number
   initialCamera?: Partial<Pick<CameraState, 'x' | 'y' | 'zoom'>>
-  render: (frame: CanvasFrame) => void
-  onTap?: (tap: SpatialTap) => void
+  render: (frame: CanvasFrame) => boolean | void
+  onTap?: (pointer: SpatialPointer) => void
+  onPointerMove?: (pointer: SpatialPointer) => boolean | void
   onPerformanceSample?: (snapshot: PerformanceSnapshot) => void
 }
 

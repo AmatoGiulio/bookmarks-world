@@ -5,6 +5,6 @@ export type {
   PerformanceSnapshot,
   SpatialEngine,
   SpatialEngineOptions,
-  SpatialTap,
+  SpatialPointer,
   ViewportState,
 } from './types'
