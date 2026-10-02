@@ -27,6 +27,7 @@ type Props = {
   chunkCy: number
   chunkCz: number
   query: string
+  focusId: string | null
   cameraGridRef: React.RefObject<CameraGridState>
   onOpen: (object: SpaceObject, origin: DOMRect) => void
 }
@@ -41,6 +42,7 @@ export function BookmarkPlane({
   chunkCy,
   chunkCz,
   query,
+  focusId,
   cameraGridRef,
   onOpen,
 }: Props) {
@@ -49,7 +51,11 @@ export function BookmarkPlane({
   const { camera, size, gl } = useThree()
   const [hovered, setHovered] = React.useState(false)
   const [texture, setTexture] = React.useState<THREE.Texture | null>(null)
-  const state = React.useRef({ opacity: 0, hover: 1 })
+  const state = React.useRef({
+    opacity: 0,
+    hover: 1,
+    focusScale: 1,
+  })
 
   const scale = React.useMemo(() => {
     const aspect = object.width / Math.max(1, object.height)
@@ -101,26 +107,55 @@ export function BookmarkPlane({
               Math.max(DEPTH_FADE_END - DEPTH_FADE_START, 0.0001),
         )
 
-    const targetOpacity = Math.min(gridFade, depthFade * depthFade) * searchOpacity
-    state.current.opacity = lerp(state.current.opacity, targetOpacity, 0.18)
-    state.current.hover = lerp(state.current.hover, hovered ? 1.045 : 1, 0.16)
+    const isFocused = focusId === object.id
+    const focusOpacity = focusId === null
+      ? 1
+      : isFocused
+        ? 0
+        : 0.075
+
+    const targetOpacity =
+      Math.min(gridFade, depthFade * depthFade) *
+      searchOpacity *
+      focusOpacity
+
+    const targetScale = focusId && !isFocused ? 0.82 : 1
+
+    state.current.opacity = lerp(
+      state.current.opacity,
+      targetOpacity,
+      focusId ? 0.14 : 0.18,
+    )
+    state.current.hover = lerp(
+      state.current.hover,
+      hovered && !focusId ? 1.045 : 1,
+      0.16,
+    )
+    state.current.focusScale = lerp(
+      state.current.focusScale,
+      targetScale,
+      0.1,
+    )
 
     material.opacity = state.current.opacity
     material.depthWrite = state.current.opacity > 0.99
     mesh.visible = state.current.opacity > INVIS_THRESHOLD
     mesh.scale.set(
-      scale.x * state.current.hover,
-      scale.y * state.current.hover,
+      scale.x * state.current.hover * state.current.focusScale,
+      scale.y * state.current.hover * state.current.focusScale,
       1,
     )
   })
 
   const open = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation()
+    if (focusId) return
+
     const mesh = meshRef.current
     if (!mesh) return
 
     mesh.updateWorldMatrix(true, false)
+
     const points = [
       new THREE.Vector3(-0.5, -0.5, 0),
       new THREE.Vector3(0.5, -0.5, 0),
@@ -131,6 +166,7 @@ export function BookmarkPlane({
     const xs = points.map((point) => (point.x * 0.5 + 0.5) * size.width)
     const ys = points.map((point) => (-point.y * 0.5 + 0.5) * size.height)
     const rect = gl.domElement.getBoundingClientRect()
+
     const left = rect.left + Math.min(...xs)
     const top = rect.top + Math.min(...ys)
     const right = rect.left + Math.max(...xs)
@@ -154,12 +190,13 @@ export function BookmarkPlane({
       onClick={open}
       onPointerOver={(event) => {
         event.stopPropagation()
+        if (focusId) return
         setHovered(true)
         gl.domElement.style.cursor = 'pointer'
       }}
       onPointerOut={() => {
         setHovered(false)
-        gl.domElement.style.cursor = 'grab'
+        if (!focusId) gl.domElement.style.cursor = 'grab'
       }}
     >
       <meshBasicMaterial

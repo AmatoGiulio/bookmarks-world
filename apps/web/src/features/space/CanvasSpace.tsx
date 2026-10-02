@@ -18,10 +18,15 @@ export function CanvasSpace() {
       <InfiniteBookmarksCanvas
         objects={spaceObjects}
         query={query}
-        onOpen={(object, origin) => setFocus({ object, origin })}
+        focusId={focus?.object.id ?? null}
+        onOpen={(object, origin) =>
+          setFocus({ object, origin })}
       />
 
-      <header className="space-chrome">
+      <header
+        className="space-chrome"
+        data-focus={focus ? 'true' : 'false'}
+      >
         <div className="space-identity">
           <strong>Giulio</strong>
           <span>{spaceObjects.length} saved things</span>
@@ -37,7 +42,12 @@ export function CanvasSpace() {
             autoComplete="off"
           />
           {query ? (
-            <button type="button" onClick={() => setQuery('')}>×</button>
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+            >
+              ×
+            </button>
           ) : (
             <kbd>/</kbd>
           )}
@@ -50,7 +60,7 @@ export function CanvasSpace() {
       </header>
 
       <div className="space-help">
-        drag to move · scroll / pinch through depth · WASD + QE
+        drag to move · scroll / pinch through depth · click a pile to unfold
       </div>
 
       {focus ? (

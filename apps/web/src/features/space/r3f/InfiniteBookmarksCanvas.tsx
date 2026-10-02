@@ -21,6 +21,7 @@ import {
   BookmarkPlane,
   type CameraGridState,
 } from './BookmarkPlane'
+import { ClusterPlane } from './ClusterPlane'
 import type { SpaceObject } from '../spaceTypes'
 
 const KEYBOARD_MAP = [
@@ -58,6 +59,7 @@ type ControllerState = {
 type Props = {
   objects: SpaceObject[]
   query: string
+  focusId: string | null
   onOpen: (object: SpaceObject, origin: DOMRect) => void
 }
 
@@ -76,7 +78,12 @@ function touchDistance(touches: Touch[]) {
   return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
 }
 
-function SceneController({ objects, query, onOpen }: Props) {
+function SceneController({
+  objects,
+  query,
+  focusId,
+  onOpen,
+}: Props) {
   const { camera, gl } = useThree()
   const [, getKeys] = useKeyboardControls<keyof KeyboardKeys>()
   const chunks = React.useMemo(() => buildBookmarkChunks(objects), [objects])
@@ -107,11 +114,24 @@ function SceneController({ objects, query, onOpen }: Props) {
   )
 
   React.useEffect(() => {
+    if (!focusId) return
+
+    const state = controller.current
+    state.velocity = { x: 0, y: 0, z: 0 }
+    state.targetVel = { x: 0, y: 0, z: 0 }
+    state.scrollAccum = 0
+    state.isDragging = false
+    gl.domElement.style.cursor = 'default'
+  }, [focusId, gl])
+
+  React.useEffect(() => {
     const canvas = gl.domElement
     const state = controller.current
-    canvas.style.cursor = 'grab'
+
+    if (!focusId) canvas.style.cursor = 'grab'
 
     const onMouseDown = (event: MouseEvent) => {
+      if (focusId) return
       state.isDragging = true
       state.lastMouse = { x: event.clientX, y: event.clientY }
       canvas.style.cursor = 'grabbing'
@@ -119,7 +139,7 @@ function SceneController({ objects, query, onOpen }: Props) {
 
     const onMouseUp = () => {
       state.isDragging = false
-      canvas.style.cursor = 'grab'
+      if (!focusId) canvas.style.cursor = 'grab'
     }
 
     const onMouseMove = (event: MouseEvent) => {
@@ -128,7 +148,7 @@ function SceneController({ objects, query, onOpen }: Props) {
         y: -(event.clientY / window.innerHeight) * 2 + 1,
       }
 
-      if (!state.isDragging) return
+      if (focusId || !state.isDragging) return
 
       state.targetVel.x -= (event.clientX - state.lastMouse.x) * 0.025
       state.targetVel.y += (event.clientY - state.lastMouse.y) * 0.025
@@ -136,11 +156,13 @@ function SceneController({ objects, query, onOpen }: Props) {
     }
 
     const onWheel = (event: WheelEvent) => {
+      if (focusId) return
       event.preventDefault()
       state.scrollAccum += event.deltaY * 0.006
     }
 
     const onTouchStart = (event: TouchEvent) => {
+      if (focusId) return
       event.preventDefault()
       state.lastTouches = Array.from(event.touches)
       state.lastTouchDist = touchDistance(state.lastTouches)
@@ -148,12 +170,15 @@ function SceneController({ objects, query, onOpen }: Props) {
     }
 
     const onTouchMove = (event: TouchEvent) => {
+      if (focusId) return
       event.preventDefault()
+
       const touches = Array.from(event.touches)
 
       if (touches.length === 1 && state.lastTouches.length >= 1) {
         const touch = touches[0]
         const last = state.lastTouches[0]
+
         if (touch && last) {
           state.targetVel.x -= (touch.clientX - last.clientX) * 0.02
           state.targetVel.y += (touch.clientY - last.clientY) * 0.02
@@ -170,7 +195,7 @@ function SceneController({ objects, query, onOpen }: Props) {
     const onTouchEnd = (event: TouchEvent) => {
       state.lastTouches = Array.from(event.touches)
       state.lastTouchDist = touchDistance(state.lastTouches)
-      canvas.style.cursor = 'grab'
+      if (!focusId) canvas.style.cursor = 'grab'
     }
 
     canvas.addEventListener('mousedown', onMouseDown)
@@ -190,68 +215,98 @@ function SceneController({ objects, query, onOpen }: Props) {
       canvas.removeEventListener('touchmove', onTouchMove)
       canvas.removeEventListener('touchend', onTouchEnd)
     }
-  }, [gl])
+  }, [focusId, gl])
 
   useFrame(() => {
     const state = controller.current
-    const {
-      forward,
-      backward,
-      left,
-      right,
-      up,
-      down,
-    } = getKeys()
 
-    if (forward) state.targetVel.z -= KEYBOARD_SPEED
-    if (backward) state.targetVel.z += KEYBOARD_SPEED
-    if (left) state.targetVel.x -= KEYBOARD_SPEED
-    if (right) state.targetVel.x += KEYBOARD_SPEED
-    if (down) state.targetVel.y -= KEYBOARD_SPEED
-    if (up) state.targetVel.y += KEYBOARD_SPEED
+    if (!focusId) {
+      const {
+        forward,
+        backward,
+        left,
+        right,
+        up,
+        down,
+      } = getKeys()
 
-    const isZooming = Math.abs(state.velocity.z) > 0.05
-    const zoomFactor = clamp(state.basePos.z / 50, 0.3, 2)
-    const driftAmount = 8 * zoomFactor
-    const driftLerp = isZooming ? 0.2 : 0.12
+      if (forward) state.targetVel.z -= KEYBOARD_SPEED
+      if (backward) state.targetVel.z += KEYBOARD_SPEED
+      if (left) state.targetVel.x -= KEYBOARD_SPEED
+      if (right) state.targetVel.x += KEYBOARD_SPEED
+      if (down) state.targetVel.y -= KEYBOARD_SPEED
+      if (up) state.targetVel.y += KEYBOARD_SPEED
 
-    if (!state.isDragging) {
-      state.drift.x = lerp(
-        state.drift.x,
-        state.mouse.x * driftAmount,
-        driftLerp,
+      const isZooming = Math.abs(state.velocity.z) > 0.05
+      const zoomFactor = clamp(state.basePos.z / 50, 0.3, 2)
+      const driftAmount = 8 * zoomFactor
+      const driftLerp = isZooming ? 0.2 : 0.12
+
+      if (!state.isDragging) {
+        state.drift.x = lerp(
+          state.drift.x,
+          state.mouse.x * driftAmount,
+          driftLerp,
+        )
+        state.drift.y = lerp(
+          state.drift.y,
+          state.mouse.y * driftAmount,
+          driftLerp,
+        )
+      }
+
+      state.targetVel.z += state.scrollAccum
+      state.scrollAccum *= 0.8
+
+      state.targetVel.x = clamp(
+        state.targetVel.x,
+        -MAX_VELOCITY,
+        MAX_VELOCITY,
       )
-      state.drift.y = lerp(
-        state.drift.y,
-        state.mouse.y * driftAmount,
-        driftLerp,
+      state.targetVel.y = clamp(
+        state.targetVel.y,
+        -MAX_VELOCITY,
+        MAX_VELOCITY,
       )
+      state.targetVel.z = clamp(
+        state.targetVel.z,
+        -MAX_VELOCITY,
+        MAX_VELOCITY,
+      )
+
+      state.velocity.x = lerp(
+        state.velocity.x,
+        state.targetVel.x,
+        VELOCITY_LERP,
+      )
+      state.velocity.y = lerp(
+        state.velocity.y,
+        state.targetVel.y,
+        VELOCITY_LERP,
+      )
+      state.velocity.z = lerp(
+        state.velocity.z,
+        state.targetVel.z,
+        VELOCITY_LERP,
+      )
+
+      state.basePos.x += state.velocity.x
+      state.basePos.y += state.velocity.y
+      state.basePos.z += state.velocity.z
+
+      state.targetVel.x *= VELOCITY_DECAY
+      state.targetVel.y *= VELOCITY_DECAY
+      state.targetVel.z *= VELOCITY_DECAY
+    } else {
+      state.drift.x = lerp(state.drift.x, 0, 0.12)
+      state.drift.y = lerp(state.drift.y, 0, 0.12)
     }
-
-    state.targetVel.z += state.scrollAccum
-    state.scrollAccum *= 0.8
-
-    state.targetVel.x = clamp(state.targetVel.x, -MAX_VELOCITY, MAX_VELOCITY)
-    state.targetVel.y = clamp(state.targetVel.y, -MAX_VELOCITY, MAX_VELOCITY)
-    state.targetVel.z = clamp(state.targetVel.z, -MAX_VELOCITY, MAX_VELOCITY)
-
-    state.velocity.x = lerp(state.velocity.x, state.targetVel.x, VELOCITY_LERP)
-    state.velocity.y = lerp(state.velocity.y, state.targetVel.y, VELOCITY_LERP)
-    state.velocity.z = lerp(state.velocity.z, state.targetVel.z, VELOCITY_LERP)
-
-    state.basePos.x += state.velocity.x
-    state.basePos.y += state.velocity.y
-    state.basePos.z += state.velocity.z
 
     camera.position.set(
       state.basePos.x + state.drift.x,
       state.basePos.y + state.drift.y,
       state.basePos.z,
     )
-
-    state.targetVel.x *= VELOCITY_DECAY
-    state.targetVel.y *= VELOCITY_DECAY
-    state.targetVel.z *= VELOCITY_DECAY
 
     const cx = Math.floor(state.basePos.x / CHUNK_SIZE)
     const cy = Math.floor(state.basePos.y / CHUNK_SIZE)
@@ -265,6 +320,7 @@ function SceneController({ objects, query, onOpen }: Props) {
     }
 
     const chunkKey = `${cx},${cy},${cz}`
+
     if (chunkKey !== state.lastChunkKey) {
       state.lastChunkKey = chunkKey
       setActiveChunks(activeChunksAround(chunks, cx, cy, cz))
@@ -273,6 +329,7 @@ function SceneController({ objects, query, onOpen }: Props) {
 
   React.useEffect(() => {
     const state = controller.current
+
     state.basePos = {
       x: camera.position.x,
       y: camera.position.y,
@@ -282,6 +339,7 @@ function SceneController({ objects, query, onOpen }: Props) {
     const cx = Math.floor(state.basePos.x / CHUNK_SIZE)
     const cy = Math.floor(state.basePos.y / CHUNK_SIZE)
     const cz = Math.floor(state.basePos.z / CHUNK_SIZE)
+
     state.lastChunkKey = `${cx},${cy},${cz}`
     setActiveChunks(activeChunksAround(chunks, cx, cy, cz))
   }, [camera, chunks])
@@ -290,18 +348,31 @@ function SceneController({ objects, query, onOpen }: Props) {
     <>
       {activeChunks.map((chunk) => (
         <React.Fragment key={chunk.key}>
-          {chunk.objects.map((object) => (
-            <BookmarkPlane
-              key={object.id}
-              object={object}
-              chunkCx={chunk.cx}
-              chunkCy={chunk.cy}
-              chunkCz={chunk.cz}
-              query={query}
-              cameraGridRef={cameraGridRef}
-              onOpen={onOpen}
-            />
-          ))}
+          {chunk.objects.map((object) =>
+            object.kind === 'cluster' ? (
+              <ClusterPlane
+                key={object.id}
+                object={object}
+                chunkCx={chunk.cx}
+                chunkCy={chunk.cy}
+                chunkCz={chunk.cz}
+                focusId={focusId}
+                cameraGridRef={cameraGridRef}
+              />
+            ) : (
+              <BookmarkPlane
+                key={object.id}
+                object={object}
+                chunkCx={chunk.cx}
+                chunkCy={chunk.cy}
+                chunkCz={chunk.cz}
+                query={query}
+                focusId={focusId}
+                cameraGridRef={cameraGridRef}
+                onOpen={onOpen}
+              />
+            ),
+          )}
         </React.Fragment>
       ))}
     </>
