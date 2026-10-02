@@ -12,6 +12,7 @@ export type SpaceObject = {
   kind: SpaceObjectKind
   title: string
   subtitle: string
+  source?: string
   x: number
   y: number
   width: number
@@ -20,4 +21,5 @@ export type SpaceObject = {
   image?: string
   accent?: string
   meta?: string
+  priority?: number
 }

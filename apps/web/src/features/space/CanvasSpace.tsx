@@ -6,13 +6,17 @@ import {
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { FocusLayer } from '../focus/FocusLayer'
 import { createCanvasScene } from './canvasScene'
-import { spaceObjects } from './spaceData'
+import { HOME_CAMERA, spaceObjects } from './spaceData'
 import type { SpaceObject } from './spaceTypes'
 
 type FocusState = {
   object: SpaceObject
   origin: DOMRect
 } | null
+
+function homeZoom(width: number) {
+  return Math.min(1.02, Math.max(0.78, width / 2200))
+}
 
 export function CanvasSpace() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -30,11 +34,6 @@ export function CanvasSpace() {
   }, [query])
 
   useEffect(() => {
-    sceneRef.current?.setFocusedId(focus?.object.id ?? null)
-    engineRef.current?.requestRender()
-  }, [focus])
-
-  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -45,15 +44,22 @@ export function CanvasSpace() {
     sceneRef.current = scene
 
     const engine = createSpatialEngine(canvas, {
-      minZoom: 0.28,
-      maxZoom: 2.6,
+      minZoom: 0.26,
+      maxZoom: 2.8,
       maxDpr: 1.5,
-      initialCamera: { x: 80, y: 120, zoom: 0.68 },
+      initialCamera: {
+        x: HOME_CAMERA.x,
+        y: HOME_CAMERA.y,
+        zoom: 0.86,
+      },
 
       render: (frame) => scene.render(frame, queryRef.current),
 
-      onPointerMove: (pointer) =>
-        scene.setPointer(pointer, queryRef.current),
+      onPointerMove: (pointer) => {
+        const state = scene.setPointer(pointer, queryRef.current)
+        canvas.dataset.hovering = state.hovering ? 'true' : 'false'
+        return state.needsRender
+      },
 
       onTap: (tap) => {
         const hit = scene.hitTest(
@@ -98,6 +104,11 @@ export function CanvasSpace() {
     })
 
     engineRef.current = engine
+    engine.focusWorldPoint(
+      HOME_CAMERA.x,
+      HOME_CAMERA.y,
+      homeZoom(engine.getViewport().width),
+    )
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Shift') {
@@ -111,15 +122,24 @@ export function CanvasSpace() {
       }
 
       if (event.key.toLowerCase() === 'h') {
-        engine.focusWorldPoint(80, 120, 0.68)
+        engine.focusWorldPoint(
+          HOME_CAMERA.x,
+          HOME_CAMERA.y,
+          homeZoom(engine.getViewport().width),
+        )
       }
 
       if (event.key === '/' && document.activeElement?.tagName !== 'INPUT') {
         event.preventDefault()
-        document.querySelector<HTMLInputElement>('[data-semantic-search]')?.focus()
+        document
+          .querySelector<HTMLInputElement>('[data-semantic-search]')
+          ?.focus()
       }
 
-      if (event.key === 'Escape' && document.activeElement?.tagName === 'INPUT') {
+      if (
+        event.key === 'Escape' &&
+        document.activeElement?.tagName === 'INPUT'
+      ) {
         setQuery('')
         ;(document.activeElement as HTMLElement).blur()
       }
@@ -146,12 +166,17 @@ export function CanvasSpace() {
 
   return (
     <main className="space-shell">
-      <canvas ref={canvasRef} className="space-canvas" data-dragging="false" />
+      <canvas
+        ref={canvasRef}
+        className="space-canvas"
+        data-dragging="false"
+        data-hovering="false"
+      />
 
       <header className="space-chrome">
         <div className="space-identity">
           <strong>Giulio</strong>
-          <span>{spaceObjects.length} objects · canvas</span>
+          <span>{spaceObjects.length} saved things</span>
         </div>
 
         <label className="semantic-search">
@@ -159,7 +184,8 @@ export function CanvasSpace() {
           <input
             data-semantic-search
             value={query}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              setQuery(event.target.value)}
             placeholder="Search this space"
             autoComplete="off"
           />
@@ -177,10 +203,14 @@ export function CanvasSpace() {
       </header>
 
       <div className="space-help">
-        drag · wheel · pinch · click stack · Shift semantic lens · / search · P perf
+        drag · pinch / wheel · click a pile · Shift lens · / search
       </div>
 
-      <div ref={hudRef} className="performance-hud" data-visible="false">
+      <div
+        ref={hudRef}
+        className="performance-hud"
+        data-visible="false"
+      >
         idle · rAF off
       </div>
 

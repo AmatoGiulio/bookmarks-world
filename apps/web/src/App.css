@@ -18,6 +18,10 @@
   background: #080808;
 }
 
+.space-canvas[data-hovering='true'] {
+  cursor: pointer;
+}
+
 .space-canvas[data-dragging='true'] {
   cursor: grabbing;
 }
@@ -65,8 +69,16 @@
   padding: 0 11px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
-  background: rgba(18, 18, 18, 0.76);
+  background: rgba(18, 18, 17, 0.48);
   backdrop-filter: blur(18px);
+  opacity: 0.58;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
+.semantic-search:hover,
+.semantic-search:focus-within {
+  opacity: 1;
+  background: rgba(18, 18, 17, 0.76);
 }
 
 .semantic-search input {
@@ -99,6 +111,12 @@
   justify-self: end;
   display: flex;
   gap: 8px;
+  opacity: 0.52;
+  transition: opacity 160ms ease;
+}
+
+.space-actions:hover {
+  opacity: 1;
 }
 
 .space-actions button {
@@ -123,7 +141,7 @@
   left: 20px;
   bottom: 18px;
   z-index: 30;
-  color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.18);
   font-size: 9px;
   pointer-events: none;
 }

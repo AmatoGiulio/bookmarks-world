@@ -5,8 +5,10 @@ import type {
   ViewportState,
 } from '@bookmarks/spatial-engine'
 import { createChunkIndex } from './chunkIndex'
+import { createImageCache } from './imageCache'
 import { semanticScore } from './semantic'
 import type { SpaceObject } from './spaceTypes'
+import { drawSpaceObject } from './surfaceRenderers'
 
 const CLUSTER_CARDS = [
   'Data Mountain',
@@ -24,18 +26,17 @@ type Hit = {
   height: number
 }
 
+type PointerState = {
+  needsRender: boolean
+  hovering: boolean
+}
+
 type Scene = {
   render: (frame: CanvasFrame, query: string) => boolean
   hitTest: (worldX: number, worldY: number, query: string) => Hit | null
   toggleCluster: (now: number) => void
   setLensActive: (active: boolean) => void
-  setPointer: (pointer: SpatialPointer, query: string) => boolean
-  setFocusedId: (id: string | null) => void
-}
-
-type ImageRecord = {
-  image: HTMLImageElement
-  ready: boolean
+  setPointer: (pointer: SpatialPointer, query: string) => PointerState
 }
 
 function clamp01(value: number) {
@@ -75,14 +76,13 @@ function relationScore(a: SpaceObject, b: SpaceObject) {
 function renderPosition(object: SpaceObject, query: string) {
   const score = semanticScore(object, query)
   const searching = query.trim().length > 0
-  const pull = searching ? score * 0.22 : 0
+  const pull = searching ? score * 0.14 : 0
 
   return {
     x: object.x - object.x * pull,
     y: object.y - object.y * pull,
-    score,
-    alpha: searching && score === 0 ? 0.1 : 1,
-    scale: searching ? 0.9 + score * 0.18 : 1,
+    alpha: searching && score === 0 ? 0.08 : 1,
+    scale: searching ? 0.94 + score * 0.13 : 1,
   }
 }
 
@@ -95,7 +95,7 @@ function isVisible(
 ) {
   const halfW = viewport.width / camera.zoom / 2
   const halfH = viewport.height / camera.zoom / 2
-  const margin = 260 / camera.zoom
+  const margin = 340 / camera.zoom
 
   return (
     x + object.width / 2 >= camera.x - halfW - margin &&
@@ -107,52 +107,15 @@ function isVisible(
 
 function fillRoundedRect(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
+  left: number,
+  top: number,
   width: number,
   height: number,
   radius: number,
 ) {
   ctx.beginPath()
-  ctx.roundRect(x, y, width, height, radius)
+  ctx.roundRect(left, top, width, height, radius)
   ctx.fill()
-}
-
-function drawImageCover(
-  ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-) {
-  const imageRatio = image.naturalWidth / Math.max(1, image.naturalHeight)
-  const targetRatio = width / height
-
-  let sourceWidth = image.naturalWidth
-  let sourceHeight = image.naturalHeight
-  let sourceX = 0
-  let sourceY = 0
-
-  if (imageRatio > targetRatio) {
-    sourceWidth = image.naturalHeight * targetRatio
-    sourceX = (image.naturalWidth - sourceWidth) / 2
-  } else {
-    sourceHeight = image.naturalWidth / targetRatio
-    sourceY = (image.naturalHeight - sourceHeight) / 2
-  }
-
-  ctx.drawImage(
-    image,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    left,
-    top,
-    width,
-    height,
-  )
 }
 
 export function createCanvasScene(
@@ -160,39 +123,22 @@ export function createCanvasScene(
   invalidate: () => void,
 ): Scene {
   const index = createChunkIndex(objects)
-  const imageCache = new Map<string, ImageRecord>()
+  const images = createImageCache(invalidate)
 
-  let focusedId: string | null = null
   let clusterProgress = 0
   let clusterTarget = 0
   let clusterLastNow = 0
+  let hoveredId: string | null = null
   let lensActive = false
   let lensPointer: SpatialPointer | null = null
   let lensFocus: SpaceObject | null = null
-
-  const getImage = (src: string) => {
-    const cached = imageCache.get(src)
-    if (cached) return cached.ready ? cached.image : null
-
-    const image = new Image()
-    const record: ImageRecord = { image, ready: false }
-    imageCache.set(src, record)
-    image.decoding = 'async'
-    image.onload = () => {
-      record.ready = true
-      invalidate()
-    }
-    image.onerror = () => imageCache.delete(src)
-    image.src = src
-    return null
-  }
 
   const queryCandidates = (
     camera: Readonly<CameraState>,
     viewport: Readonly<ViewportState>,
     query: string,
   ) => {
-    const candidates = index.query(camera, viewport, 520)
+    const candidates = index.query(camera, viewport, 620)
 
     if (!query.trim()) return candidates
 
@@ -220,12 +166,37 @@ export function createCanvasScene(
     const top = y - height / 2
 
     ctx.save()
-    ctx.globalAlpha = alpha * (1 - clusterProgress * 0.3)
+    ctx.globalAlpha = alpha
 
     for (let index = 4; index >= 0; index -= 1) {
-      const offset = index * 7
-      ctx.fillStyle = `hsl(${34 + index * 22} 12% ${18 + index * 4}%)`
-      fillRoundedRect(ctx, left + offset, top - offset, width * 0.58, height * 0.45, 3)
+      const offset = index * 8
+      ctx.fillStyle = ['#ece7dc', '#34312c', '#91856f', '#171715', '#d1c9b8'][index]
+      fillRoundedRect(
+        ctx,
+        left + offset,
+        top - offset,
+        width * 0.65,
+        height * 0.53,
+        4,
+      )
+    }
+
+    if (width * zoom > 135 && clusterProgress < 0.65) {
+      ctx.fillStyle = 'rgba(255,255,255,.9)'
+      ctx.font = `600 ${16 / zoom}px system-ui`
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(
+        object.title,
+        left + 18 / zoom,
+        top + height * 0.53 - 28 / zoom,
+      )
+      ctx.fillStyle = 'rgba(255,255,255,.42)'
+      ctx.font = `${9 / zoom}px system-ui`
+      ctx.fillText(
+        object.subtitle,
+        left + 18 / zoom,
+        top + height * 0.53 - 11 / zoom,
+      )
     }
 
     ctx.restore()
@@ -233,27 +204,25 @@ export function createCanvasScene(
     if (clusterProgress <= 0.001) return
 
     for (let index = 0; index < CLUSTER_CARDS.length; index += 1) {
-      const stagger = index * 0.045
+      const stagger = index * 0.04
       const local = easeInOutCubic(
         clamp01((clusterProgress - stagger) / (1 - stagger)),
       )
 
-      const targetX = x + 220 + (index % 2) * 34
-      const targetY = y + (index - 2) * 112
-      const controlAX = x + 54
-      const controlAY = y - (targetY - y) * 0.095
-      const controlBX = targetX - 88
-      const controlBY = targetY - 18
+      const targetX = x + 315 + (index % 2) * 36
+      const targetY = y + (index - 2) * 124
+      const waypointX = targetX * 0.95 + x * 0.05
+      const waypointY = y - (targetY - y) * 0.095
 
-      const cardX = cubicBezier(x, controlAX, controlBX, targetX, local)
-      const cardY = cubicBezier(y, controlAY, controlBY, targetY, local)
-      const cardScale = 0.72 + local * 0.28
-      const cardW = 156 * cardScale
-      const cardH = 94 * cardScale
+      const cardX = cubicBezier(x, waypointX, targetX - 74, targetX, local)
+      const cardY = cubicBezier(y, waypointY, targetY - 20, targetY, local)
+      const cardScale = 0.74 + local * 0.26
+      const cardW = 188 * cardScale
+      const cardH = 112 * cardScale
 
       ctx.save()
       ctx.globalAlpha = alpha * local
-      ctx.fillStyle = `hsl(${34 + index * 24} 12% ${20 + index * 5}%)`
+      ctx.fillStyle = ['#e9e3d7', '#252421', '#b6a98d', '#111110', '#d9d2c3'][index]
       fillRoundedRect(
         ctx,
         cardX - cardW / 2,
@@ -263,14 +232,16 @@ export function createCanvasScene(
         4,
       )
 
-      if (cardW * zoom > 82) {
-        ctx.fillStyle = 'rgba(255,255,255,.78)'
+      if (cardW * zoom > 95) {
+        ctx.fillStyle = index === 1 || index === 3
+          ? 'rgba(255,255,255,.84)'
+          : 'rgba(18,18,16,.8)'
         ctx.font = `600 ${10 / zoom}px system-ui`
         ctx.textAlign = 'left'
         ctx.textBaseline = 'middle'
         ctx.fillText(
           CLUSTER_CARDS[index],
-          cardX - cardW / 2 + 12 / zoom,
+          cardX - cardW / 2 + 13 / zoom,
           cardY,
         )
       }
@@ -289,20 +260,17 @@ export function createCanvasScene(
     zoom: number,
     relationAlpha = 1,
   ) => {
-    if (object.id === focusedId) return
-
-    const width = object.width * scale
-    const height = object.height * scale
+    const hoverScale = hoveredId === object.id ? 1.025 : 1
+    const width = object.width * scale * hoverScale
+    const height = object.height * scale * hoverScale
     const left = x - width / 2
     const top = y - height / 2
-    const projectedWidth = width * zoom
     const finalAlpha = alpha * relationAlpha
 
     if (finalAlpha <= 0.01) return
 
     ctx.save()
     ctx.globalAlpha = finalAlpha
-    ctx.fillStyle = object.accent ?? '#e9e7e0'
 
     if (object.kind === 'cluster') {
       drawCluster(ctx, object, x, y, width, height, zoom, finalAlpha)
@@ -310,81 +278,16 @@ export function createCanvasScene(
       return
     }
 
-    if (object.kind === 'audio') {
-      ctx.beginPath()
-      ctx.arc(x, y, Math.min(width, height) / 2, 0, Math.PI * 2)
-      ctx.fill()
-    } else {
-      fillRoundedRect(
-        ctx,
-        left,
-        top,
-        width,
-        height,
-        object.kind === 'video' ? 6 : 3,
-      )
-    }
+    const image = object.image ? images.get(object.image) : null
 
-    if (object.image && projectedWidth >= 48) {
-      const image = getImage(object.image)
-      if (image) {
-        ctx.save()
-        if (object.kind === 'audio') {
-          ctx.beginPath()
-          ctx.arc(x, y, Math.min(width, height) / 2, 0, Math.PI * 2)
-        } else {
-          ctx.beginPath()
-          ctx.roundRect(left, top, width, height, object.kind === 'video' ? 6 : 3)
-        }
-        ctx.clip()
-        drawImageCover(ctx, image, left, top, width, height)
-        ctx.restore()
-      }
-    }
-
-    if (object.kind === 'paper' && projectedWidth > 115) {
-      ctx.strokeStyle = 'rgba(15,15,15,.18)'
-      ctx.lineWidth = 1 / zoom
-      for (let row = 0; row < 4; row += 1) {
-        const yy = top + height - 34 - row * 18
-        ctx.beginPath()
-        ctx.moveTo(left + 22, yy)
-        ctx.lineTo(left + width * (row === 2 ? 0.62 : 0.86), yy)
-        ctx.stroke()
-      }
-    }
-
-    if (object.kind === 'repo' && projectedWidth > 90) {
-      ctx.fillStyle = 'rgba(255,255,255,.78)'
-      ctx.font = `${32 / zoom}px ui-monospace, monospace`
-      ctx.fillText('{ }', left + 20, top + 46 / zoom)
-    }
-
-    if (object.kind === 'video' && projectedWidth > 100) {
-      ctx.fillStyle = 'rgba(0,0,0,.42)'
-      ctx.beginPath()
-      ctx.arc(x, y, 22 / zoom, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = 'rgba(255,255,255,.9)'
-      ctx.font = `${13 / zoom}px system-ui`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('▶', x + 1 / zoom, y)
-    }
-
-    if (projectedWidth > 82) {
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'top'
-      ctx.fillStyle = 'rgba(248,247,243,.92)'
-      ctx.font = `600 ${11 / zoom}px system-ui`
-      ctx.fillText(object.title, left, top + height + 10 / zoom)
-
-      if (projectedWidth > 170) {
-        ctx.fillStyle = 'rgba(248,247,243,.42)'
-        ctx.font = `${9 / zoom}px system-ui`
-        ctx.fillText(object.subtitle, left, top + height + 26 / zoom)
-      }
-    }
+    drawSpaceObject({
+      ctx,
+      object,
+      bounds: { left, top, width, height, x, y },
+      zoom,
+      image,
+      hovered: hoveredId === object.id,
+    })
 
     ctx.restore()
   }
@@ -409,7 +312,7 @@ export function createCanvasScene(
       if (!isVisible(object, state.x, state.y, camera, viewport)) continue
 
       const related = relationFocus
-        ? 0.08 + relationScore(relationFocus, object) * 0.92
+        ? 0.07 + relationScore(relationFocus, object) * 0.93
         : 1
 
       drawObject(
@@ -424,47 +327,6 @@ export function createCanvasScene(
       )
     }
 
-    ctx.restore()
-  }
-
-  const renderLens = (frame: CanvasFrame, query: string) => {
-    if (!lensActive || !lensPointer) return
-
-    const { ctx } = frame
-    const size = 210
-    const left = lensPointer.screenX - size / 2
-    const top = lensPointer.screenY - size / 2
-
-    ctx.save()
-    ctx.beginPath()
-    ctx.roundRect(left, top, size, size, 22)
-    ctx.clip()
-    ctx.fillStyle = 'rgba(228,225,215,.07)'
-    ctx.fillRect(left, top, size, size)
-    drawWorld(frame, query, lensFocus)
-    ctx.restore()
-
-    ctx.save()
-    ctx.strokeStyle = 'rgba(248,247,243,.34)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.roundRect(left + 0.5, top + 0.5, size - 1, size - 1, 22)
-    ctx.stroke()
-
-    ctx.fillStyle = 'rgba(8,8,8,.68)'
-    ctx.fillRect(left + 12, top + size - 47, size - 24, 35)
-    ctx.fillStyle = 'rgba(255,255,255,.9)'
-    ctx.font = '600 10px system-ui'
-    ctx.textAlign = 'left'
-    ctx.textBaseline = 'top'
-    ctx.fillText(lensFocus?.title ?? 'semantic lens', left + 20, top + size - 40)
-    ctx.fillStyle = 'rgba(255,255,255,.48)'
-    ctx.font = '9px system-ui'
-    ctx.fillText(
-      lensFocus?.tags.slice(0, 3).join(' · ') ?? 'move across the space',
-      left + 20,
-      top + size - 25,
-    )
     ctx.restore()
   }
 
@@ -488,22 +350,77 @@ export function createCanvasScene(
     return null
   }
 
+  const renderLens = (frame: CanvasFrame, query: string) => {
+    if (!lensActive || !lensPointer) return
+
+    const { ctx } = frame
+    const size = 224
+    const left = lensPointer.screenX - size / 2
+    const top = lensPointer.screenY - size / 2
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.roundRect(left, top, size, size, 24)
+    ctx.clip()
+    ctx.fillStyle = 'rgba(232,228,216,.055)'
+    ctx.fillRect(left, top, size, size)
+    drawWorld(frame, query, lensFocus)
+    ctx.restore()
+
+    ctx.save()
+    ctx.strokeStyle = 'rgba(248,247,243,.3)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.roundRect(left + 0.5, top + 0.5, size - 1, size - 1, 24)
+    ctx.stroke()
+
+    ctx.fillStyle = 'rgba(8,8,8,.74)'
+    fillRoundedRect(ctx, left + 12, top + size - 52, size - 24, 40, 9)
+
+    ctx.fillStyle = 'rgba(255,255,255,.92)'
+    ctx.font = '600 10px system-ui'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillText(
+      lensFocus?.title ?? 'semantic lens',
+      left + 20,
+      top + size - 44,
+    )
+
+    ctx.fillStyle = 'rgba(255,255,255,.46)'
+    ctx.font = '9px system-ui'
+    ctx.fillText(
+      lensFocus?.tags.slice(0, 3).join(' · ') ?? 'move across the space',
+      left + 20,
+      top + size - 27,
+    )
+    ctx.restore()
+  }
+
   return {
     render: (frame, query) => {
-      const dt = clusterLastNow === 0 ? 16.67 : Math.min(40, frame.now - clusterLastNow)
+      const dt = clusterLastNow === 0
+        ? 16.67
+        : Math.min(40, frame.now - clusterLastNow)
       clusterLastNow = frame.now
 
-      const clusterDelta = clusterTarget - clusterProgress
-      const clusterAnimating = Math.abs(clusterDelta) > 0.001
+      const delta = clusterTarget - clusterProgress
+      const clusterAnimating = Math.abs(delta) > 0.001
+
       if (clusterAnimating) {
         const response = 1 - Math.exp(-dt / 115)
-        clusterProgress += clusterDelta * response
+        clusterProgress += delta * response
       } else {
         clusterProgress = clusterTarget
       }
 
-      frame.ctx.fillStyle = '#080808'
-      frame.ctx.fillRect(0, 0, frame.viewport.width, frame.viewport.height)
+      frame.ctx.fillStyle = '#070706'
+      frame.ctx.fillRect(
+        0,
+        0,
+        frame.viewport.width,
+        frame.viewport.height,
+      )
 
       drawWorld(frame, query)
       renderLens(frame, query)
@@ -525,13 +442,28 @@ export function createCanvasScene(
 
     setPointer: (pointer, query) => {
       lensPointer = pointer
-      if (!lensActive) return false
-      lensFocus = hitTest(pointer.worldX, pointer.worldY, query)?.object ?? null
-      return true
-    },
 
-    setFocusedId: (id) => {
-      focusedId = id
+      const nextHovered = hitTest(
+        pointer.worldX,
+        pointer.worldY,
+        query,
+      )?.object.id ?? null
+
+      const changed = nextHovered !== hoveredId
+      hoveredId = nextHovered
+
+      if (lensActive) {
+        lensFocus = hitTest(
+          pointer.worldX,
+          pointer.worldY,
+          query,
+        )?.object ?? null
+      }
+
+      return {
+        needsRender: changed || lensActive,
+        hovering: hoveredId !== null,
+      }
     },
   }
 }
