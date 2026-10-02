@@ -8,6 +8,7 @@ export function SemanticLens({ viewportRef }: Props) {
   const lensRef = useRef<HTMLDivElement | null>(null)
   const titleRef = useRef<HTMLElement | null>(null)
   const tagsRef = useRef<HTMLSpanElement | null>(null)
+  const relatedRef = useRef<HTMLSpanElement | null>(null)
 
   useEffect(() => {
     const viewport = viewportRef.current
@@ -21,10 +22,21 @@ export function SemanticLens({ viewportRef }: Props) {
 
     const paint = () => {
       rafId = 0
-      lens.style.transform = `translate3d(${x - 86}px,${y - 86}px,0)`
-      const target = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-lens-target="true"]')
-      if (titleRef.current) titleRef.current.textContent = target?.dataset.title ?? 'semantic lens'
-      if (tagsRef.current) tagsRef.current.textContent = target?.dataset.tags ?? 'hold Shift and move'
+      lens.style.transform = `translate3d(${x - 92}px,${y - 92}px,0)`
+      const target = document
+        .elementFromPoint(x, y)
+        ?.closest<HTMLElement>('[data-lens-target="true"]')
+
+      if (titleRef.current) {
+        titleRef.current.textContent = target?.dataset.title ?? 'semantic lens'
+      }
+      if (tagsRef.current) {
+        tagsRef.current.textContent = target?.dataset.tags ?? 'hold Shift and move'
+      }
+      if (relatedRef.current) {
+        const related = target?.dataset.related
+        relatedRef.current.textContent = related ? `near · ${related}` : ''
+      }
     }
 
     const schedule = () => {
@@ -53,11 +65,12 @@ export function SemanticLens({ viewportRef }: Props) {
     viewport.addEventListener('pointermove', move)
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
+
     return () => {
       viewport.removeEventListener('pointermove', move)
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
-      if (rafId) cancelAnimationFrame(rafId)
+      if (rafId !== 0) cancelAnimationFrame(rafId)
     }
   }, [viewportRef])
 
@@ -67,6 +80,7 @@ export function SemanticLens({ viewportRef }: Props) {
       <div className="lens-label">
         <strong ref={titleRef}>semantic lens</strong>
         <span ref={tagsRef}>hold Shift and move</span>
+        <span ref={relatedRef} className="lens-related" />
       </div>
     </div>
   )
