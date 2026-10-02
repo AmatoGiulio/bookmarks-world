@@ -1,18 +1,41 @@
 # Bookmarks World architecture
 
-The first slice validates one thing: a spatial bookmark world must feel native at pointer speed before backend or social features.
+## Canvas first
 
-`apps/web` owns React composition and rich bookmark renderers.
-`packages/spatial-engine` owns the hot path: camera, input, inertia, scheduling and transforms.
+The spatial world is an actual HTML canvas. React does not mount one DOM node per bookmark.
 
-React is not allowed to drive pan, zoom or inertia frame-by-frame.
+React owns only product chrome and rich overlays such as a focused video, paper or repository. The infinite world, camera, hit testing, culling and level-of-detail rendering live outside React.
 
-## Invariants
+```text
+React chrome / focused living object
+              |
+              v
+        <canvas> stage
+              |
+              v
+Spatial engine
+  camera
+  input
+  inertia
+  scheduler
+  DPR sizing
+              |
+              v
+Canvas scene renderer
+  culling
+  semantic deformation
+  LOD
+  hit testing
+```
 
-- No React state updates in the animation loop.
-- `requestAnimationFrame` sleeps when motion stops.
-- Pointer input never waits for React reconciliation.
-- Camera state is mutable and engine-owned.
-- Object focus is a continuity transition, not a navigation reset.
-- Expensive media gets explicit runtime budgets before real ingestion lands.
-- New visual effects do not enter the hot path without profiling.
+## Hot-path invariants
+
+- zero React state updates during pan, zoom or inertia
+- one canvas, one scheduler
+- requestAnimationFrame sleeps at rest
+- rendering is DPR aware
+- only visible objects are drawn
+- detail is selected from projected size
+- DOM is promoted only for focused / interactive living content
+
+The renderer backend can later move from Canvas 2D to WebGL2 without changing the product boundary.

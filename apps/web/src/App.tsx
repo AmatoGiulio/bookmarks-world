@@ -1,6 +1,6 @@
-import { SpaceViewport } from './features/space/SpaceViewport'
+import { CanvasSpace } from './features/space/CanvasSpace'
 import './App.css'
 
 export default function App() {
-  return <SpaceViewport />
+  return <CanvasSpace />
 }

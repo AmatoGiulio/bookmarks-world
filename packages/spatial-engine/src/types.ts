@@ -9,6 +9,7 @@ export type CameraState = {
 export type ViewportState = {
   width: number
   height: number
+  dpr: number
 }
 
 export type PerformanceSnapshot = {
@@ -17,13 +18,30 @@ export type PerformanceSnapshot = {
   idle: boolean
 }
 
+export type CanvasFrame = {
+  ctx: CanvasRenderingContext2D
+  camera: Readonly<CameraState>
+  viewport: Readonly<ViewportState>
+  now: number
+}
+
+export type SpatialTap = {
+  clientX: number
+  clientY: number
+  worldX: number
+  worldY: number
+}
+
 export type SpatialEngineOptions = {
   minZoom?: number
   maxZoom?: number
   friction?: number
   wheelPanScale?: number
   zoomSensitivity?: number
+  maxDpr?: number
   initialCamera?: Partial<Pick<CameraState, 'x' | 'y' | 'zoom'>>
+  render: (frame: CanvasFrame) => void
+  onTap?: (tap: SpatialTap) => void
   onPerformanceSample?: (snapshot: PerformanceSnapshot) => void
 }
 
@@ -34,4 +52,6 @@ export type SpatialEngine = {
   getPerformance: () => Readonly<PerformanceSnapshot>
   focusWorldPoint: (x: number, y: number, zoom?: number) => void
   requestRender: () => void
+  clientToWorld: (clientX: number, clientY: number) => { x: number; y: number }
+  worldToClient: (x: number, y: number) => { x: number; y: number }
 }
