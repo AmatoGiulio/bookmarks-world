@@ -15,6 +15,7 @@ export type SpaceObject = {
   source?: string
   x: number
   y: number
+  z: number
   width: number
   height: number
   tags: string[]
