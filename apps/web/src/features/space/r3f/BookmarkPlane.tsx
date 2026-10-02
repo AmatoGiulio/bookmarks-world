@@ -65,6 +65,10 @@ export function BookmarkPlane({
     focusScale: 1,
     semanticOpacity: 0,
     semanticScale: 1,
+    x: object.x,
+    y: object.y,
+    z: object.z,
+    searchScale: 1,
   })
 
   const scale = React.useMemo(() => {
@@ -73,11 +77,12 @@ export function BookmarkPlane({
     return new THREE.Vector3(baseHeight * aspect, baseHeight, 1)
   }, [object.height, object.priority, object.width])
 
-  const searchOpacity = React.useMemo(() => {
-    if (!query.trim()) return 1
-    const score = semanticScore(object, query)
-    return score <= 0 ? 0.06 : 0.42 + score * 0.58
-  }, [object, query])
+  const searchScore = React.useMemo(
+    () => semanticScore(object, query),
+    [object, query],
+  )
+
+  const searching = query.trim().length > 0
 
   React.useEffect(() => {
     const loaded = getBookmarkTexture(object, (next) => {
@@ -132,6 +137,12 @@ export function BookmarkPlane({
               Math.max(DEPTH_FADE_END - DEPTH_FADE_START, 0.0001),
         )
 
+    const searchOpacity = searching
+      ? searchScore <= 0
+        ? 0.035
+        : 0.48 + searchScore * 0.52
+      : 1
+
     const baseVisibility =
       Math.min(gridFade, depthFade * depthFade) *
       searchOpacity
@@ -144,7 +155,41 @@ export function BookmarkPlane({
         : 0.075
 
     const targetOpacity = baseVisibility * focusOpacity
-    const targetScale = focusId && !isFocused ? 0.82 : 1
+    const targetFocusScale = focusId && !isFocused ? 0.82 : 1
+
+    const relevance = searching ? searchScore : 0
+    const targetX = searching && relevance > 0
+      ? lerp(object.x, camera.position.x, relevance * 0.34)
+      : object.x
+    const targetY = searching && relevance > 0
+      ? lerp(object.y, camera.position.y, relevance * 0.34)
+      : object.y
+    const targetZ = searching
+      ? relevance > 0
+        ? object.z + 22 + relevance * 24
+        : object.z - 26
+      : object.z
+    const targetSearchScale = searching
+      ? relevance > 0
+        ? 1 + relevance * 0.18
+        : 0.82
+      : 1
+
+    state.current.x = lerp(state.current.x, targetX, 0.085)
+    state.current.y = lerp(state.current.y, targetY, 0.085)
+    state.current.z = lerp(state.current.z, targetZ, 0.085)
+    state.current.searchScale = lerp(
+      state.current.searchScale,
+      targetSearchScale,
+      0.085,
+    )
+
+    mesh.position.set(
+      state.current.x,
+      state.current.y,
+      state.current.z,
+    )
+    semanticMesh.position.copy(mesh.position)
 
     state.current.opacity = lerp(
       state.current.opacity,
@@ -158,7 +203,7 @@ export function BookmarkPlane({
     )
     state.current.focusScale = lerp(
       state.current.focusScale,
-      targetScale,
+      targetFocusScale,
       0.1,
     )
 
@@ -166,9 +211,14 @@ export function BookmarkPlane({
     material.depthWrite = state.current.opacity > 0.99
     mesh.visible = state.current.opacity > INVIS_THRESHOLD
 
+    const finalScale =
+      state.current.hover *
+      state.current.focusScale *
+      state.current.searchScale
+
     mesh.scale.set(
-      scale.x * state.current.hover * state.current.focusScale,
-      scale.y * state.current.hover * state.current.focusScale,
+      scale.x * finalScale,
+      scale.y * finalScale,
       1,
     )
 
@@ -197,8 +247,12 @@ export function BookmarkPlane({
       state.current.semanticOpacity > INVIS_THRESHOLD
 
     semanticMesh.scale.set(
-      scale.x * state.current.semanticScale,
-      scale.y * state.current.semanticScale,
+      scale.x *
+        state.current.semanticScale *
+        state.current.searchScale,
+      scale.y *
+        state.current.semanticScale *
+        state.current.searchScale,
       1,
     )
   })
@@ -217,10 +271,15 @@ export function BookmarkPlane({
       new THREE.Vector3(0.5, -0.5, 0),
       new THREE.Vector3(0.5, 0.5, 0),
       new THREE.Vector3(-0.5, 0.5, 0),
-    ].map((point) => point.applyMatrix4(mesh.matrixWorld).project(camera))
+    ].map((point) =>
+      point.applyMatrix4(mesh.matrixWorld).project(camera))
 
-    const xs = points.map((point) => (point.x * 0.5 + 0.5) * size.width)
-    const ys = points.map((point) => (-point.y * 0.5 + 0.5) * size.height)
+    const xs = points.map(
+      (point) => (point.x * 0.5 + 0.5) * size.width,
+    )
+    const ys = points.map(
+      (point) => (-point.y * 0.5 + 0.5) * size.height,
+    )
     const rect = gl.domElement.getBoundingClientRect()
 
     const left = rect.left + Math.min(...xs)
@@ -230,7 +289,12 @@ export function BookmarkPlane({
 
     onOpen(
       object,
-      new DOMRect(left, top, right - left, bottom - top),
+      new DOMRect(
+        left,
+        top,
+        right - left,
+        bottom - top,
+      ),
     )
   }
 

@@ -3,10 +3,12 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type CSSProperties,
   type MouseEvent,
 } from 'react'
 import type { SpaceObject } from '../space/spaceTypes'
+import { LivingFocusContent } from './LivingFocusContent'
 
 type Props = {
   object: SpaceObject
@@ -29,6 +31,7 @@ export function FocusLayer({
   const backdropRef = useRef<HTMLDivElement | null>(null)
   const detailRef = useRef<HTMLElement | null>(null)
   const closingRef = useRef(false)
+  const [live, setLive] = useState(false)
 
   useLayoutEffect(() => {
     const hero = heroRef.current
@@ -91,6 +94,12 @@ export function FocusLayer({
         fill: 'both',
       },
     )
+
+    const timer = window.setTimeout(() => {
+      setLive(true)
+    }, 460)
+
+    return () => window.clearTimeout(timer)
   }, [origin])
 
   const close = useCallback(async () => {
@@ -106,6 +115,7 @@ export function FocusLayer({
     }
 
     closingRef.current = true
+    setLive(false)
 
     const target = hero.getBoundingClientRect()
     const dx = origin.left - target.left
@@ -198,18 +208,31 @@ export function FocusLayer({
           ))}
         </div>
 
-        <button
-          type="button"
-          className="focus-close"
-          onClick={() => void close()}
-        >
-          Back to space
-        </button>
+        <div className="focus-actions-row">
+          <button
+            type="button"
+            className="focus-close"
+            onClick={() => void close()}
+          >
+            Back to space
+          </button>
+
+          {object.url ? (
+            <a
+              href={object.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open source ↗
+            </a>
+          ) : null}
+        </div>
       </section>
 
       <div
         ref={heroRef}
         className={`focus-hero focus-hero--${object.kind}`}
+        data-live={live ? 'true' : 'false'}
         style={{
           aspectRatio: `${object.width} / ${object.height}`,
           ...sourceStyle(object),
@@ -217,15 +240,23 @@ export function FocusLayer({
         onMouseDown={(event: MouseEvent<HTMLDivElement>) =>
           event.stopPropagation()}
       >
-        {object.image ? (
-          <img src={object.image} alt="" />
-        ) : (
-          <div className="focus-hero__generated">
-            <span>{object.source ?? object.kind}</span>
-            <strong>{object.title}</strong>
-            <small>{object.subtitle}</small>
+        <div className="focus-hero__poster">
+          {object.image ? (
+            <img src={object.image} alt="" />
+          ) : (
+            <div className="focus-hero__generated">
+              <span>{object.source ?? object.kind}</span>
+              <strong>{object.title}</strong>
+              <small>{object.subtitle}</small>
+            </div>
+          )}
+        </div>
+
+        {live ? (
+          <div className="focus-hero__live">
+            <LivingFocusContent object={object} />
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )

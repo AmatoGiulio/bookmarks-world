@@ -23,4 +23,7 @@ export type SpaceObject = {
   accent?: string
   meta?: string
   priority?: number
+  url?: string
+  embedUrl?: string
+  repoFullName?: string
 }
